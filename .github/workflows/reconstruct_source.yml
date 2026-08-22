@@ -1,0 +1,66 @@
+name: Finalize V9 source upload
+
+on:
+  push:
+    branches: ["main"]
+
+permissions:
+  contents: write
+
+jobs:
+  reconstruct:
+    if: ${{ hashFiles('.upload/integrated.part01') != '' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Reconstruct exact source files
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import base64, gzip, hashlib
+
+          jobs = [
+              (
+                  [Path('.upload/reporting_full_results.py.gz.b64')],
+                  Path('reporting/full_results.py'),
+                  '6ccfeb7e7f61da00ad5b5c7fc6acb8e4b23a082d518ee9292ac284a7b3141858',
+              ),
+              (
+                  [Path('.upload/undulator_v11_radia_gui_v9.py.gz.b64')],
+                  Path('undulator_v11_radia_gui_v9.py'),
+                  '14f000a3e85fef48b54acc687338cff5010d4458e330828381414788efe2c0ac',
+              ),
+              (
+                  [Path(f'.upload/integrated.part{i:02d}') for i in range(1, 6)],
+                  Path('undulator_v11_radia_integrated_v9.py'),
+                  'a67a9648cb4ba2e1004bf2bf48f5c35f145fdbe6e7df25f880992161af2bf0b7',
+              ),
+          ]
+
+          for pieces, dest, expected in jobs:
+              encoded = ''.join(p.read_text(encoding='utf-8') for p in pieces)
+              data = gzip.decompress(base64.b64decode(encoded))
+              got = hashlib.sha256(data).hexdigest()
+              if got != expected:
+                  raise SystemExit(f'SHA-256 mismatch for {dest}: {got} != {expected}')
+              dest.parent.mkdir(parents=True, exist_ok=True)
+              dest.write_bytes(data)
+              print(f'{dest}: SHA-256 {got} PASS')
+          PY
+
+      - name: Remove upload staging files
+        run: |
+          rm -rf .upload
+          rm -f .github/workflows/reconstruct_source.yml
+
+      - name: Commit exact reconstructed sources
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "Finalize V9 full visualization source"
+          git push
