@@ -26,46 +26,76 @@ def calibrate_br(
     rad, kind, params, target_b0_t, *,
     mode="Central-period peak B⊥",
     relax=False, precision=1e-4, max_iter=1000,
-    iterations=4, samples=241
+    iterations=8, samples=241, relative_tolerance=5e-3
 ):
-    """
-    Calibrate Br against a selected ideal-device B0 definition.
-
-    Default is central-period peak transverse field, avoiding accidental
-    calibration to a fringe/end-field overshoot.
-    """
+    """Calibrate Br and fail explicitly unless the requested B0 is achieved."""
     target = float(target_b0_t)
     if target <= 0:
         raise ValueError("Target B0 must be > 0.")
+    tol = float(relative_tolerance)
+    if not (0.0 < tol < 1.0):
+        raise ValueError("relative_tolerance must be between 0 and 1.")
 
     p = dict(params)
     p["errors_enabled"] = False
     br = float(p["br_t"])
     history = []
+    niter = max(2, int(iterations))
 
-    niter = 1 if p.get("material_mode") == "Fixed remanence" else max(2, int(iterations))
     for _ in range(niter):
         if hasattr(rad, "UtiDelAll"):
             rad.UtiDelAll()
         p["br_t"] = br
         model = build_device(rad, kind, p)
-        solve_model(rad, model, relax=relax, precision=precision, max_iter=max_iter, method=4)
+        solve_model(
+            rad, model, relax=relax,
+            precision=precision, max_iter=max_iter, method=4
+        )
         peak = _measure_b0(rad, model, p, mode, samples)
         if not np.isfinite(peak) or peak <= 1e-12:
-            raise RuntimeError("B0 calibration failed because computed transverse field is zero/non-finite.")
-        history.append({"Br_T": br, "B0_T": peak, "mode": mode})
-        scale = target / peak
-        if abs(scale - 1.0) < 2e-4:
+            raise RuntimeError(
+                "B0 calibration failed because computed transverse field is zero/non-finite."
+            )
+
+        rel_err = abs(peak - target) / target
+        history.append({
+            "Br_T": br,
+            "B0_T": peak,
+            "target_B0_T": target,
+            "relative_error": rel_err,
+            "mode": mode,
+        })
+        if rel_err <= tol:
             return br, history
+
+        scale = target / peak
         scale = min(5.0, max(0.2, float(scale)))
         br *= scale
 
-    # Final verification sample after last scaling operation.
     if hasattr(rad, "UtiDelAll"):
         rad.UtiDelAll()
     p["br_t"] = br
     model = build_device(rad, kind, p)
-    solve_model(rad, model, relax=relax, precision=precision, max_iter=max_iter, method=4)
+    solve_model(
+        rad, model, relax=relax,
+        precision=precision, max_iter=max_iter, method=4
+    )
     peak = _measure_b0(rad, model, p, mode, samples)
-    history.append({"Br_T": br, "B0_T": peak, "mode": mode})
+    rel_err = abs(peak - target) / target if np.isfinite(peak) else float("inf")
+    history.append({
+        "Br_T": br,
+        "B0_T": peak,
+        "target_B0_T": target,
+        "relative_error": rel_err,
+        "mode": mode,
+    })
+
+    if (not np.isfinite(peak)) or peak <= 1e-12 or rel_err > tol:
+        raise RuntimeError(
+            "B0 calibration did not reach the requested target: "
+            f"target={target:.9g} T, actual={peak:.9g} T, "
+            f"relative_error={rel_err:.3%}, Br={br:.9g} T, "
+            f"tolerance={tol:.3%}."
+        )
     return br, history
+
