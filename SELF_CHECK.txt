@@ -1,8 +1,0 @@
-Python compileall: PASS
-Research-complete mock integration test: PASS
-ALL RESEARCH-COMPLETE MOCK TESTS PASSED
-Old-bug pattern scan: PASS
-Required UI feature scan: PASS
-Calibration verification step: PASS
-Launcher source mode: 755
-Real macOS RADIA .so runtime: requires execution on the user's Mac.
