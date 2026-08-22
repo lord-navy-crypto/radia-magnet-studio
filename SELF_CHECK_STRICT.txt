@@ -1,0 +1,13 @@
+Python compileall: PASS
+ALL RESEARCH-COMPLETE MOCK TESTS PASSED
+ALL STRICT CORRECTNESS TESTS PASSED
+relaxation_avprec_gate: PASS
+relaxation_iteration_gate: PASS
+geometry_range: PASS
+explicit_k_definitions: PASS
+electron_phase: PASS
+zero_crossing_labeled_diagnostic: PASS
+b0_modes: PASS
+hdf5_skipped_record: PASS
+Launcher source mode: 755
+Real macOS RADIA .so numerical run: still requires execution on the user's Mac.

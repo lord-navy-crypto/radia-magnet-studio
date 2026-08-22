@@ -1,0 +1,33 @@
+# macOS
+.DS_Store
+
+# Python caches and environments
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+env/
+.pytest_cache/
+.mypy_cache/
+
+# Secrets and local configuration
+.env
+.env.*
+!.env.example
+
+# Compiled extensions and local RADIA builds
+*.so
+*.dylib
+*.dll
+*.o
+*.a
+
+# Generated scientific outputs and reports
+*.h5
+*.hdf5
+*.log
+
+# Editors
+.idea/
+.vscode/
