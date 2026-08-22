@@ -1,33 +1,58 @@
 # macOS
 .DS_Store
+.AppleDouble
+.LSOverride
 
-# Python caches and environments
+# Python
 __pycache__/
 *.py[cod]
-*.pyo
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Virtual environments
 .venv/
 venv/
 env/
-.pytest_cache/
-.mypy_cache/
+ENV/
 
-# Secrets and local configuration
+# IDE/editor
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Local configuration / secrets
 .env
 .env.*
 !.env.example
+.streamlit/secrets.toml
+*.pem
+*.key
+id_rsa
+id_rsa.pub
 
-# Compiled extensions and local RADIA builds
-*.so
-*.dylib
-*.dll
-*.o
-*.a
-
-# Generated scientific outputs and reports
+# Generated scientific outputs
+outputs/
+results/
 *.h5
 *.hdf5
+*.npy
+*.npz
+*.pkl
+*.pickle
 *.log
 
-# Editors
-.idea/
-.vscode/
+# Build/distribution
+build/
+dist/
+*.egg-info/
+
+# Temporary files
+*.tmp
+*.bak
+*.orig

@@ -1,6 +1,6 @@
-numpy
-pandas
-streamlit
-plotly
-h5py
-matplotlib
+numpy>=2.0
+scipy>=1.14
+pandas>=3.0.5
+matplotlib>=3.9
+streamlit>=1.40
+plotly>=5.24

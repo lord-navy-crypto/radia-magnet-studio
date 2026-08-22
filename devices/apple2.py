@@ -19,7 +19,8 @@ def build_apple2(rad,p):
     phase_deg=float(p.get("apple_phase_deg",90.0))
     shift_mode=p.get("apple_shift_mode","Antiparallel")
     dz=period/bpp; block_len=dz*fill; total_len=periods*period
-    off=gap/2+height/2
+    xoff=gap/2+width/2
+    yoff=gap/2+height/2
     delta=(phase_deg/360.0)*period
 
     if shift_mode=="Parallel":
@@ -28,10 +29,10 @@ def build_apple2(rad,p):
         shifts=[+delta/2,-delta/2,+delta/2,-delta/2]
 
     arrays=[
-        ("TR",[+off,+off],shifts[0],+1,+1),
-        ("TL",[-off,+off],shifts[1],-1,+1),
-        ("BL",[-off,-off],shifts[2],+1,-1),
-        ("BR",[+off,-off],shifts[3],-1,-1),
+        ("TR",[+xoff,+yoff],shifts[0],+1,+1),
+        ("TL",[-xoff,+yoff],shifts[1],-1,+1),
+        ("BL",[-xoff,-yoff],shifts[2],+1,-1),
+        ("BR",[+xoff,-yoff],shifts[3],-1,-1),
     ]
     ctx=ErrorContext(p); objects=[]; meta=[]; nblocks=periods*bpp
     for row,xy,zshift,bank_group,ul_group in arrays:
