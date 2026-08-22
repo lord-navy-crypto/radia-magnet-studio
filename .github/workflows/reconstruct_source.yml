@@ -12,7 +12,6 @@ permissions:
 
 jobs:
   reconstruct:
-    if: ${{ hashFiles('.upload/integrated.part01') != '' }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -21,9 +20,14 @@ jobs:
         with:
           ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.ref || github.ref_name }}
 
-      - name: Reconstruct exact source files
+      - name: Reconstruct and commit exact source files
         shell: bash
         run: |
+          if [ ! -f .upload/integrated.part01 ]; then
+            echo "Upload staging files are already gone; nothing to finalize."
+            exit 0
+          fi
+
           python - <<'PY'
           from pathlib import Path
           import base64, gzip, hashlib
@@ -45,19 +49,15 @@ jobs:
               print(f'{dest}: SHA-256 {got} PASS')
           PY
 
-      - name: Remove upload staging files
-        run: |
           rm -rf .upload
           rm -f .github/workflows/reconstruct_source.yml
-          rm -f .finalize-trigger
+          rm -f .finalize-trigger .finalize-trigger-2
 
-      - name: Commit exact reconstructed sources
-        shell: bash
-        run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -A
           git commit -m "Finalize V9 full visualization source"
+
           if [ "${{ github.event_name }}" = "pull_request" ]; then
             git push origin "HEAD:${{ github.event.pull_request.head.ref }}"
           else
