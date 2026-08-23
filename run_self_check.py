@@ -15,6 +15,7 @@ TESTS = [
     "test_downstream_reader.py",
     "test_strict_correctness.py",
     "test_studies.py",
+    "test_presets.py",
     "test_integrated_ui.py",
     "test_smoke.py",
 ]

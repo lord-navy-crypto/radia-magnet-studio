@@ -20,6 +20,9 @@ def run():
     # Advanced studies must be reachable from the same app and reuse a completed run.
     assert "render_advanced_analysis" in studio
     assert 'st.session_state["magnet_study_source"]' in studio
+    assert "Import preset (.json)" in studio
+    assert "Export current preset (.json)" in studio
+    assert "Download realized preset (.json)" in studio
     assert "Connected to the magnetic field generated above" in studies
     assert "Continue analysis" in studies
     assert "@st.fragment" in studies

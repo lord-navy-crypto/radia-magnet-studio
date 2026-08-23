@@ -85,6 +85,7 @@ def render_advanced_analysis():
     )
     base = dict(baseline["base_parameters"])
     settings = dict(baseline["settings"])
+    study_defaults = dict(baseline.get("study_defaults", {}))
 
     if analysis_type == "Parameter sensitivity and optimization":
         c1, c2 = st.columns(2)
@@ -117,7 +118,10 @@ def render_advanced_analysis():
             return
     elif analysis_type == "Monte Carlo uncertainty":
         c1, c2 = st.columns(2)
-        samples = c1.number_input("Random realizations", min_value=2, value=20, step=1)
+        samples = c1.number_input(
+            "Random realizations", min_value=2,
+            value=int(study_defaults.get("monte_carlo_samples", 20)), step=1,
+        )
         seed_start = c2.number_input("First random seed", min_value=0, value=int(base.get("error_seed", 0)), step=1)
         config = {
             "study_type": "monte_carlo", "base_parameters": base, "settings": settings,
@@ -128,7 +132,10 @@ def render_advanced_analysis():
         segmentations = c1.text_input("Magnet subdivisions", "1, 2")
         sample_counts = c2.text_input("Axis sample counts", f"{max(100, settings['axis_samples']//2)}, {settings['axis_samples']}")
         margins = c3.text_input("Field margins (periods)", f"{max(0.0, settings['field_margin_periods']*0.5):.6g}, {settings['field_margin_periods']:.6g}")
-        tolerance = st.number_input("Relative convergence tolerance", min_value=1e-6, value=0.01, format="%.6g")
+        tolerance = st.number_input(
+            "Relative convergence tolerance", min_value=1e-6,
+            value=float(study_defaults.get("convergence_tolerance", 0.01)), format="%.6g",
+        )
         try:
             config = {
                 "study_type": "convergence", "base_parameters": base, "settings": settings,
@@ -140,7 +147,9 @@ def render_advanced_analysis():
             st.error(str(exc))
             return
 
-    workers = st.slider("Parallel RADIA worker processes", 1, max(1, min(8, os.cpu_count() or 1)), 2)
+    worker_max = max(1, min(8, os.cpu_count() or 1))
+    worker_default = max(1, min(worker_max, int(study_defaults.get("worker_processes", 2))))
+    workers = st.slider("Parallel RADIA worker processes", 1, worker_max, worker_default)
     plan_id = stable_hash(config)[:16]
     output_dir = RUN_ROOT / plan_id
     config_path = output_dir / "config.json"

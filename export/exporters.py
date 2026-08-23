@@ -12,7 +12,7 @@ import numpy as np
 
 SCHEMA_NAME = "radia-magnet-studio-transfer"
 SCHEMA_VERSION = "1.0.0"
-PRODUCER_VERSION = "3.0.0"
+PRODUCER_VERSION = "3.1.0"
 
 
 def _field_arrays(z_mm, B):

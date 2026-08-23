@@ -1,4 +1,4 @@
-# RADIA Magnet Studio 3.0
+# RADIA Magnet Studio 3.1
 
 Open the complete unified application with:
 
@@ -12,6 +12,13 @@ The application is one continuous workflow. After `Build + Solve + Analyze`
 finishes, the same page automatically connects the realized device and solver
 settings to parameter sensitivity, Monte Carlo, or convergence analysis. No
 workspace switch, export, or manual baseline transfer is required.
+
+The Presets sidebar imports validated `radia-magnet-preset` v1 JSON files and
+restores every relevant UI control. The current requested configuration can be
+exported before solving; a successful run can export a realized preset with
+the calibrated Br and calibration history. Built-in research examples cover
+all device families and a manufacturing-error demonstration. See
+`PRESET_SPEC.md` and `examples/read_preset.py` for the cross-application contract.
 
 For resumable terminal execution use `RUN_RADIA_STUDY.command`. See `STUDIES.md`.
 

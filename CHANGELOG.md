@@ -1,5 +1,14 @@
 # Changelog
 
+## 3.1.0
+
+- Added versioned preset import/export, SHA-256 integrity verification, strict
+  units, boolean, device and value validation, and complete UI-control restoration.
+- Added six built-in research presets plus requested and realized preset exports;
+  realized presets preserve calibrated Br and calibration history.
+- Added forward-compatible extensions, portable study defaults, a public preset
+  specification, and a reference reader for a second program.
+
 ## 3.0.0
 
 - Replaced the temporary two-workspace UI with one continuous page: a successful

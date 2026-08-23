@@ -20,9 +20,13 @@ from export.exporters import (
     csv_bytes, json_bytes, hdf5_bytes, pdf_bytes, fieldmap3d_csv_bytes,
     research_package_bytes, validate_research_package_bytes,
 )
+from presets import (
+    BUILTIN_PRESETS, build_preset, parse_preset, preset_json_bytes,
+    runtime_to_widget_state,
+)
 
 st.set_page_config(page_title="RADIA Magnet Studio", layout="wide")
-st.title("RADIA Magnet Studio 3.0 — Magnetic Field Generator & Inspector")
+st.title("RADIA Magnet Studio 3.1 — Magnetic Field Generator & Inspector")
 st.caption(
     "Build and inspect RADIA magnetic devices; solve and sample on-axis, 2D, and 3D fields; "
     "analyze trajectories, field integrals, harmonics, phase error, and polarization-related metrics; "
@@ -30,54 +34,80 @@ st.caption(
 )
 
 with st.sidebar:
+    st.header("Presets")
+    builtin_name = st.selectbox("Built-in preset", list(BUILTIN_PRESETS), key="preset_builtin_name")
+    if st.button("Load built-in preset", width="stretch"):
+        runtime = parse_preset(BUILTIN_PRESETS[builtin_name])
+        st.session_state.update(runtime_to_widget_state(runtime))
+        st.session_state["preset_extensions"] = runtime["extensions"]
+        st.session_state["preset_study_defaults"] = runtime["study_defaults"]
+        st.rerun()
+    uploaded_preset = st.file_uploader("Import preset (.json)", type=["json"], key="preset_upload")
+    if uploaded_preset is not None:
+        try:
+            imported_runtime = parse_preset(uploaded_preset.getvalue())
+            st.caption(
+                f"Validated: {imported_runtime['metadata'].get('name', 'Unnamed preset')} "
+                f"({imported_runtime['parameters']['device']})"
+            )
+            for warning in imported_runtime["warnings"]:
+                st.warning(warning)
+            if st.button("Apply imported preset", type="primary", width="stretch"):
+                st.session_state.update(runtime_to_widget_state(imported_runtime))
+                st.session_state["preset_extensions"] = imported_runtime["extensions"]
+                st.session_state["preset_study_defaults"] = imported_runtime["study_defaults"]
+                st.rerun()
+        except Exception as exc:
+            st.error(f"Preset rejected: {exc}")
+    st.divider()
     st.header("Device")
-    device = st.selectbox("Type", ["Planar", "Helical", "Elliptical", "APPLE-II", "Wiggler"])
-    period_mm = st.number_input("Period λu (mm)", min_value=1.0, value=50.0, step=1.0)
-    periods = st.number_input("Number of periods", min_value=1, value=20, step=1)
-    gap_mm = st.number_input("Magnetic gap (mm)", min_value=0.5, value=12.0, step=0.5)
+    device = st.selectbox("Type", ["Planar", "Helical", "Elliptical", "APPLE-II", "Wiggler"], key="cfg_device")
+    period_mm = st.number_input("Period λu (mm)", min_value=1.0, value=50.0, step=1.0, key="cfg_period_mm")
+    periods = st.number_input("Number of periods", min_value=1, value=20, step=1, key="cfg_periods")
+    gap_mm = st.number_input("Magnetic gap (mm)", min_value=0.5, value=12.0, step=0.5, key="cfg_gap_mm")
     blocks_per_period = st.selectbox(
         "Blocks per period", [4, 8, 12, 16],
-        index=1 if device in ("Helical", "Elliptical") else 0
+        index=1 if device in ("Helical", "Elliptical") else 0, key="cfg_blocks_per_period"
     )
 
     st.header("Magnet blocks")
-    block_width_mm = st.number_input("Block width x (mm)", min_value=0.1, value=10.0)
-    block_height_mm = st.number_input("Block height / radial thickness (mm)", min_value=0.1, value=10.0)
-    longitudinal_fill = st.slider("Longitudinal fill factor", 0.50, 0.99, 0.90, 0.01)
-    br_t = st.number_input("Remanent induction Br (T)", min_value=0.01, value=1.20, step=0.05)
+    block_width_mm = st.number_input("Block width x (mm)", min_value=0.1, value=10.0, key="cfg_block_width_mm")
+    block_height_mm = st.number_input("Block height / radial thickness (mm)", min_value=0.1, value=10.0, key="cfg_block_height_mm")
+    longitudinal_fill = st.slider("Longitudinal fill factor", 0.50, 0.99, 0.90, 0.01, key="cfg_longitudinal_fill")
+    br_t = st.number_input("Remanent induction Br (T)", min_value=0.01, value=1.20, step=0.05, key="cfg_br_t")
 
     st.header("Target B0 calibration")
-    target_b0_enabled = st.checkbox("Calibrate Br to target B0", value=False)
+    target_b0_enabled = st.checkbox("Calibrate Br to target B0", value=False, key="cfg_target_b0_enabled")
     target_b0_t = st.number_input(
         "Target B0 (T)", min_value=0.001, value=0.15, step=0.01,
-        disabled=not target_b0_enabled
+        disabled=not target_b0_enabled, key="cfg_target_b0_t"
     )
     b0_mode = st.selectbox(
         "B0 definition",
         ["Central-period peak B⊥", "Central 3-period peak B⊥", "Global peak B⊥"],
-        disabled=not target_b0_enabled
+        disabled=not target_b0_enabled, key="cfg_b0_definition"
     )
 
     st.header("Material / solve")
-    material_mode = st.selectbox("Magnet model", ["Fixed remanence", "Linear NdFeB + relaxation"])
-    mu_parallel = st.number_input("μr parallel", min_value=1.0, value=1.05, step=0.01)
-    mu_perpendicular = st.number_input("μr perpendicular", min_value=1.0, value=1.05, step=0.01)
-    seg_n = st.selectbox("Magnet subdivision", [1, 2, 3], index=0)
+    material_mode = st.selectbox("Magnet model", ["Fixed remanence", "Linear NdFeB + relaxation"], key="cfg_material_mode")
+    mu_parallel = st.number_input("μr parallel", min_value=1.0, value=1.05, step=0.01, key="cfg_mu_parallel")
+    mu_perpendicular = st.number_input("μr perpendicular", min_value=1.0, value=1.05, step=0.01, key="cfg_mu_perpendicular")
+    seg_n = st.selectbox("Magnet subdivision", [1, 2, 3], index=0, key="cfg_seg_n")
     relax = (material_mode == "Linear NdFeB + relaxation") and st.checkbox(
-        "Run RADIA relaxation", value=True
+        "Run RADIA relaxation", value=True, key="cfg_relax"
     )
-    precision = st.number_input("Relaxation precision (T)", min_value=1e-7, value=1e-4, format="%.1e")
-    max_iter = st.number_input("Relaxation max iterations", min_value=1, value=1000, step=100)
+    precision = st.number_input("Relaxation precision (T)", min_value=1e-7, value=1e-4, format="%.1e", key="cfg_precision")
+    max_iter = st.number_input("Relaxation max iterations", min_value=1, value=1000, step=100, key="cfg_max_iter")
 
     st.header("Device-specific")
-    ellipticity = st.slider("Ellipticity", 0.0, 1.0, 0.5, 0.01, disabled=device != "Elliptical")
+    ellipticity = st.slider("Ellipticity", 0.0, 1.0, 0.5, 0.01, disabled=device != "Elliptical", key="cfg_ellipticity")
     apple_phase_deg = st.slider(
         "APPLE-II magnetic row phase (deg)", -180.0, 180.0, 90.0, 1.0,
-        disabled=device != "APPLE-II"
+        disabled=device != "APPLE-II", key="cfg_apple_phase_deg"
     )
     apple_shift_mode = st.selectbox(
         "APPLE-II shift mode", ["Antiparallel", "Parallel"],
-        disabled=device != "APPLE-II"
+        disabled=device != "APPLE-II", key="cfg_apple_shift_mode"
     )
     if device == "APPLE-II":
         st.caption(
@@ -86,27 +116,66 @@ with st.sidebar:
         )
 
     st.header("Manufacturing error model")
-    errors_enabled = st.checkbox("Enable manufacturing errors", value=False)
-    field_error_pct = st.number_input("Field amplitude error σ (%)", min_value=0.0, value=1.0, step=0.1, disabled=not errors_enabled)
-    longitudinal_error_mm = st.number_input("Longitudinal position error σ (mm)", min_value=0.0, value=0.05, step=0.01, disabled=not errors_enabled)
-    transverse_error_mm = st.number_input("Transverse position error σ (mm)", min_value=0.0, value=0.05, step=0.01, disabled=not errors_enabled)
-    angle_error_deg = st.number_input("Magnetization angle error σ (deg)", min_value=0.0, value=0.5, step=0.1, disabled=not errors_enabled)
-    gap_asymmetry_mm = st.number_input("Gap asymmetry (mm)", value=0.0, step=0.01, disabled=not errors_enabled)
-    bank_imbalance_pct = st.number_input("Bank strength imbalance (%)", value=0.0, step=0.1, disabled=not errors_enabled)
-    error_seed = st.number_input("Random seed", min_value=0, value=12345, step=1, disabled=not errors_enabled)
-    compare_ideal = st.checkbox("Compute ideal-vs-error comparison", value=True, disabled=not errors_enabled)
+    errors_enabled = st.checkbox("Enable manufacturing errors", value=False, key="cfg_errors_enabled")
+    field_error_pct = st.number_input("Field amplitude error σ (%)", min_value=0.0, value=1.0, step=0.1, disabled=not errors_enabled, key="cfg_field_error_pct")
+    longitudinal_error_mm = st.number_input("Longitudinal position error σ (mm)", min_value=0.0, value=0.05, step=0.01, disabled=not errors_enabled, key="cfg_longitudinal_error_mm")
+    transverse_error_mm = st.number_input("Transverse position error σ (mm)", min_value=0.0, value=0.05, step=0.01, disabled=not errors_enabled, key="cfg_transverse_error_mm")
+    angle_error_deg = st.number_input("Magnetization angle error σ (deg)", min_value=0.0, value=0.5, step=0.1, disabled=not errors_enabled, key="cfg_angle_error_deg")
+    gap_asymmetry_mm = st.number_input("Gap asymmetry (mm)", value=0.0, step=0.01, disabled=not errors_enabled, key="cfg_gap_asymmetry_mm")
+    bank_imbalance_pct = st.number_input("Bank strength imbalance (%)", value=0.0, step=0.1, disabled=not errors_enabled, key="cfg_bank_imbalance_pct")
+    error_seed = st.number_input("Random seed", min_value=0, value=12345, step=1, disabled=not errors_enabled, key="cfg_error_seed")
+    compare_ideal = st.checkbox("Compute ideal-vs-error comparison", value=True, disabled=not errors_enabled, key="cfg_compare_ideal")
 
     st.header("Field sampling")
-    axis_samples = st.slider("On-axis samples", 100, 4000, 1000, 100)
+    axis_samples = st.slider("On-axis samples", 100, 4000, 1000, 100, key="cfg_axis_samples")
     field_margin_periods = st.number_input(
         "Longitudinal field margin (periods)", min_value=0.0, value=1.0, step=0.5,
-        help="Added beyond the actual outer magnet-block edges for fringe-field integrals."
+        help="Added beyond the actual outer magnet-block edges for fringe-field integrals.", key="cfg_field_margin_periods"
     )
-    electron_energy_GeV = st.number_input("Electron energy (GeV)", min_value=0.01, value=3.0, step=0.1)
-    make_2d = st.checkbox("Calculate 2D field slice", value=True)
-    make_3d = st.checkbox("Calculate sparse 3D field map", value=True)
-    transverse_half_mm = st.number_input("Transverse map half-width (mm)", min_value=0.1, value=5.0, step=0.5)
-    geometry_limit = st.slider("Maximum blocks in 3D geometry viewer", 100, 1200, 600, 100)
+    electron_energy_GeV = st.number_input("Electron energy (GeV)", min_value=0.01, value=3.0, step=0.1, key="cfg_electron_energy_GeV")
+    make_2d = st.checkbox("Calculate 2D field slice", value=True, key="cfg_make_2d")
+    make_3d = st.checkbox("Calculate sparse 3D field map", value=True, key="cfg_make_3d")
+    transverse_half_mm = st.number_input("Transverse map half-width (mm)", min_value=0.1, value=5.0, step=0.5, key="cfg_transverse_half_mm")
+    geometry_limit = st.slider("Maximum blocks in 3D geometry viewer", 100, 1200, 600, 100, key="cfg_geometry_limit")
+
+current_params = {
+    "device": device, "period_mm": float(period_mm), "periods": int(periods),
+    "gap_mm": float(gap_mm), "blocks_per_period": int(blocks_per_period),
+    "block_width_mm": float(block_width_mm), "block_height_mm": float(block_height_mm),
+    "longitudinal_fill": float(longitudinal_fill), "br_t": float(br_t),
+    "material_mode": material_mode, "mu_parallel": float(mu_parallel),
+    "mu_perpendicular": float(mu_perpendicular),
+    "segmentation": (int(seg_n), int(seg_n), int(seg_n)),
+    "ellipticity": float(ellipticity), "apple_phase_deg": float(apple_phase_deg),
+    "apple_shift_mode": apple_shift_mode, "errors_enabled": bool(errors_enabled),
+    "field_error_pct": float(field_error_pct),
+    "longitudinal_error_mm": float(longitudinal_error_mm),
+    "transverse_error_mm": float(transverse_error_mm),
+    "angle_error_deg": float(angle_error_deg), "gap_asymmetry_mm": float(gap_asymmetry_mm),
+    "bank_imbalance_pct": float(bank_imbalance_pct), "error_seed": int(error_seed),
+    "target_b0_enabled": bool(target_b0_enabled), "target_b0_t": float(target_b0_t),
+    "b0_definition": b0_mode,
+}
+current_settings = {
+    "axis_samples": int(axis_samples), "field_margin_periods": float(field_margin_periods),
+    "electron_energy_GeV": float(electron_energy_GeV), "relax": bool(relax),
+    "precision": float(precision), "max_iter": int(max_iter), "method": 4,
+    "calculate_2d": bool(make_2d), "calculate_3d": bool(make_3d),
+    "transverse_half_width_mm": float(transverse_half_mm),
+}
+current_ui = {"compare_ideal": bool(compare_ideal), "geometry_limit": int(geometry_limit)}
+
+st.download_button(
+    "Export current preset (.json)",
+    preset_json_bytes(
+        current_params, current_settings, name=f"{device} requested configuration",
+        ui_settings=current_ui,
+        study_defaults=st.session_state.get("preset_study_defaults"),
+        extensions=st.session_state.get("preset_extensions"),
+    ),
+    "radia_magnet_preset_v1.json", "application/json",
+    on_click="ignore", width="stretch",
+)
 
 run = st.button("Build + Solve + Analyze", type="primary", width="stretch")
 
@@ -116,44 +185,16 @@ if run:
         if hasattr(rad, "UtiDelAll"):
             rad.UtiDelAll()
 
-        params = {
-            "device": device,
-            "period_mm": float(period_mm),
-            "periods": int(periods),
-            "gap_mm": float(gap_mm),
-            "blocks_per_period": int(blocks_per_period),
-            "block_width_mm": float(block_width_mm),
-            "block_height_mm": float(block_height_mm),
-            "longitudinal_fill": float(longitudinal_fill),
-            "br_t": float(br_t),
-            "material_mode": material_mode,
-            "mu_parallel": float(mu_parallel),
-            "mu_perpendicular": float(mu_perpendicular),
-            "segmentation": (int(seg_n), int(seg_n), int(seg_n)),
-            "ellipticity": float(ellipticity),
-            "apple_phase_deg": float(apple_phase_deg),
-            "apple_shift_mode": apple_shift_mode,
-            "errors_enabled": bool(errors_enabled),
-            "field_error_pct": float(field_error_pct),
-            "longitudinal_error_mm": float(longitudinal_error_mm),
-            "transverse_error_mm": float(transverse_error_mm),
-            "angle_error_deg": float(angle_error_deg),
-            "gap_asymmetry_mm": float(gap_asymmetry_mm),
-            "bank_imbalance_pct": float(bank_imbalance_pct),
-            "error_seed": int(error_seed),
-            "target_b0_enabled": bool(target_b0_enabled),
-            "target_b0_t": float(target_b0_t) if target_b0_enabled else None,
-            "b0_definition": b0_mode if target_b0_enabled else None,
-            "relax_enabled": bool(relax),
-            "relax_precision_t": float(precision),
-            "relax_max_iterations": int(max_iter),
-            "axis_samples": int(axis_samples),
+        params = dict(current_params)
+        params.update({
+            "relax_enabled": bool(relax), "relax_precision_t": float(precision),
+            "relax_max_iterations": int(max_iter), "axis_samples": int(axis_samples),
             "field_margin_periods": float(field_margin_periods),
             "electron_energy_GeV": float(electron_energy_GeV),
             "calculate_2d_slice": bool(make_2d),
             "calculate_3d_field_map": bool(make_3d),
             "transverse_map_half_width_mm": float(transverse_half_mm),
-        }
+        })
         progress = st.progress(0, text="Preparing model…")
 
         calibration_history = []
@@ -238,15 +279,9 @@ if run:
         # consumes this exact realized configuration (including calibrated Br).
         st.session_state["magnet_study_source"] = {
             "base_parameters": dict(params),
-            "settings": {
-                "axis_samples": int(axis_samples),
-                "field_margin_periods": float(field_margin_periods),
-                "electron_energy_GeV": float(electron_energy_GeV),
-                "relax": bool(relax),
-                "precision": float(precision),
-                "max_iter": int(max_iter),
-                "method": 4,
-            },
+            "settings": dict(current_settings),
+            "study_defaults": dict(st.session_state.get("preset_study_defaults", {})),
+            "extensions": dict(st.session_state.get("preset_extensions", {})),
         }
 
         classification = classify_k(metrics["K_peak"])
@@ -470,6 +505,25 @@ if run:
                 )
 
             st.subheader("Export")
+            try:
+                st.download_button(
+                    "Download realized preset (.json)",
+                    preset_json_bytes(
+                        params, current_settings,
+                        name=f"{device} realized configuration",
+                        description="Exact successfully solved configuration, including calibrated Br.",
+                        realized=True, calibration_history=calibration_history,
+                        ui_settings=current_ui,
+                        study_defaults=st.session_state.get("preset_study_defaults"),
+                        extensions=st.session_state.get("preset_extensions"),
+                    ),
+                    "radia_magnet_realized_preset_v1.json", "application/json",
+                    on_click="ignore", width="stretch",
+                    help="Portable settings-only file for reproducing this solved model or loading it in another application.",
+                )
+            except Exception as exc:
+                st.warning(f"Realized-preset export unavailable: {exc}")
+
             e1, e2 = st.columns(2)
             try:
                 e1.download_button(
