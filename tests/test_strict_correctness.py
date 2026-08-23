@@ -1,3 +1,4 @@
+import importlib.util
 import sys, math, tempfile, os
 from pathlib import Path
 import numpy as np
@@ -71,21 +72,25 @@ def run():
     assert "zero_crossing_field_phase_rms_deg" in metrics
     assert "electron_phase_error_rms_deg" in metrics
 
-    # 5. HDF5 exporter returns real HDF5 bytes and does not silently drop unsupported metadata.
-    params=dict(BASE); params["unsupported_for_h5"]={"x":1}
-    metrics2=dict(metrics)
-    blob=hdf5_bytes(z,B,params,metrics2)
-    assert blob[:8] == b"\x89HDF\r\n\x1a\n"
-    import h5py
-    fd,path=tempfile.mkstemp(suffix=".h5"); os.close(fd)
-    try:
-        Path(path).write_bytes(blob)
-        with h5py.File(path,"r") as f:
-            assert "export_skipped_items" in f
-            vals=[v.decode() if isinstance(v,bytes) else str(v) for v in f["export_skipped_items"][:]]
-            assert any("unsupported_for_h5" in v for v in vals)
-    finally:
-        os.unlink(path)
+    # 5. HDF5 exporter returns real HDF5 bytes and preserves nested data.
+    if importlib.util.find_spec("h5py") is not None:
+        params=dict(BASE); params["nested_for_h5"]={"x":1}
+        metrics2=dict(metrics)
+        blob=hdf5_bytes(z,B,params,metrics2)
+        assert blob[:8] == b"\x89HDF\r\n\x1a\n"
+        import h5py
+        fd,path=tempfile.mkstemp(suffix=".h5"); os.close(fd)
+        try:
+            Path(path).write_bytes(blob)
+            with h5py.File(path,"r") as f:
+                assert f.attrs["schema_version"] == "1.0.0"
+                assert f["parameters/nested_for_h5"].attrs["x"] == 1
+                assert "metrics/trajectory/x_mm" in f
+                assert "metrics/electron_phase/phase_error_deg" in f
+        finally:
+            os.unlink(path)
+    else:
+        print("SKIP HDF5 assertions: h5py is not installed")
 
     # 6. B0 central-period calibration verifies final field.
     rad=FakeRadia()

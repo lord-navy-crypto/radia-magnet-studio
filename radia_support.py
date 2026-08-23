@@ -15,12 +15,12 @@ def load_radia():
     candidates.append(DEFAULT_RADIA_PATH)
 
     # Normal import first (works if the user already exported PYTHONPATH).
+    errors = []
     try:
         return importlib.import_module("radia")
-    except ImportError:
-        pass
+    except ImportError as exc:
+        errors.append(f"normal import: {exc}")
 
-    errors = []
     for path in candidates:
         if not path.exists():
             errors.append(f"missing: {path}")
@@ -34,8 +34,8 @@ def load_radia():
             errors.append(f"{path}: {exc}")
 
     raise ImportError(
-        "RADIA Python extension could not be loaded. Checked: "
-        + "; ".join(errors)
+        "RADIA Python extension could not be loaded. Set RADIA_PYTHONPATH to the "
+        "directory containing radia*.so. Checked: " + "; ".join(errors)
     )
 
 def create_linear_ndfeb(rad, br_t=1.20, mu_parallel=1.05, mu_perpendicular=1.05):

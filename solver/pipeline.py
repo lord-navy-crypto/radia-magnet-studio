@@ -39,11 +39,25 @@ def solve_model(rad, model, *, relax, precision=1e-4, max_iter=1000, method=4):
             )
     return info
 
-def sample_points(rad, obj, points_mm):
-    out = np.empty((len(points_mm), 3), dtype=float)
-    for i, p in enumerate(points_mm):
-        b = rad.Fld(obj, "B", [float(p[0]), float(p[1]), float(p[2])])
-        out[i] = [float(b[0]), float(b[1]), float(b[2])]
+def sample_points(rad, obj, points_mm, *, chunk_size=10000):
+    points = np.asarray(points_mm, dtype=float)
+    if points.ndim != 2 or points.shape[1] != 3:
+        raise ValueError(f"points_mm must have shape (N, 3); got {points.shape}.")
+    if not np.all(np.isfinite(points)):
+        raise ValueError("Sampling coordinates must be finite.")
+    if int(chunk_size) < 1:
+        raise ValueError("chunk_size must be at least 1.")
+    out = np.empty((len(points), 3), dtype=float)
+    for start in range(0, len(points), int(chunk_size)):
+        stop = min(start + int(chunk_size), len(points))
+        for i in range(start, stop):
+            p = points[i]
+            b = rad.Fld(obj, "B", [float(p[0]), float(p[1]), float(p[2])])
+            if not isinstance(b, (list, tuple, np.ndarray)) or len(b) < 3:
+                raise RuntimeError(f"RADIA Fld returned an invalid vector at point {p.tolist()}: {b!r}")
+            out[i] = [float(b[0]), float(b[1]), float(b[2])]
+    if not np.all(np.isfinite(out)):
+        raise RuntimeError("RADIA returned a non-finite magnetic-field value.")
     return out
 
 def sample_on_axis(rad, obj, z_mm):

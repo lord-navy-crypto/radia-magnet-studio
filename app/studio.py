@@ -1,5 +1,6 @@
 from __future__ import annotations
 import math
+import platform
 import numpy as np
 import pandas as pd
 import streamlit as st
@@ -16,15 +17,16 @@ from visualization.plots import (
     geometry_view, ideal_error_field_plot, electron_phase_plot
 )
 from export.exporters import (
-    csv_bytes, json_bytes, hdf5_bytes, pdf_bytes, fieldmap3d_csv_bytes
+    csv_bytes, json_bytes, hdf5_bytes, pdf_bytes, fieldmap3d_csv_bytes,
+    research_package_bytes, validate_research_package_bytes,
 )
 
 st.set_page_config(page_title="RADIA Magnet Studio", layout="wide")
-st.title("RADIA Magnet Studio — Clear Results + JSON Fix")
+st.title("RADIA Magnet Studio 3.0 — Magnetic Field Generator & Inspector")
 st.caption(
-    "Local RADIA insertion-device modelling with convergence checks, geometry-derived "
-    "field integration range, manufacturing errors, B0 calibration and trajectory-derived phase error. "
-    "This build changes presentation/export only; the magnetic-field and analysis calculations are unchanged."
+    "Build and inspect RADIA magnetic devices; solve and sample on-axis, 2D, and 3D fields; "
+    "analyze trajectories, field integrals, harmonics, phase error, and polarization-related metrics; "
+    "then export the same results for downstream trajectory and radiation tools."
 )
 
 with st.sidebar:
@@ -106,7 +108,7 @@ with st.sidebar:
     transverse_half_mm = st.number_input("Transverse map half-width (mm)", min_value=0.1, value=5.0, step=0.5)
     geometry_limit = st.slider("Maximum blocks in 3D geometry viewer", 100, 1200, 600, 100)
 
-run = st.button("Build + Solve + Analyze", type="primary", use_container_width=True)
+run = st.button("Build + Solve + Analyze", type="primary", width="stretch")
 
 if run:
     try:
@@ -139,8 +141,19 @@ if run:
             "gap_asymmetry_mm": float(gap_asymmetry_mm),
             "bank_imbalance_pct": float(bank_imbalance_pct),
             "error_seed": int(error_seed),
+            "target_b0_enabled": bool(target_b0_enabled),
+            "target_b0_t": float(target_b0_t) if target_b0_enabled else None,
+            "b0_definition": b0_mode if target_b0_enabled else None,
+            "relax_enabled": bool(relax),
+            "relax_precision_t": float(precision),
+            "relax_max_iterations": int(max_iter),
+            "axis_samples": int(axis_samples),
+            "field_margin_periods": float(field_margin_periods),
+            "electron_energy_GeV": float(electron_energy_GeV),
+            "calculate_2d_slice": bool(make_2d),
+            "calculate_3d_field_map": bool(make_3d),
+            "transverse_map_half_width_mm": float(transverse_half_mm),
         }
-
         progress = st.progress(0, text="Preparing model…")
 
         calibration_history = []
@@ -184,6 +197,7 @@ if run:
             range_models, float(period_mm), float(field_margin_periods)
         )
         z = np.linspace(z_lo, z_hi, int(axis_samples))
+        params["field_range_mm"] = [float(z_lo), float(z_hi)]
         B = sample_on_axis(rad, model["obj"], z)
         metrics = analyze(z, B, float(period_mm), float(electron_energy_GeV))
 
@@ -219,6 +233,21 @@ if run:
             grid3 = (x3, y3, z3)
         progress.progress(90, text="3D field map complete." if make_3d else "3D map skipped.")
         progress.progress(100, text="Complete.")
+        # Publish the baseline only after the magnetic model, field sampling, and
+        # primary analysis have all completed successfully. Advanced analysis below
+        # consumes this exact realized configuration (including calibrated Br).
+        st.session_state["magnet_study_source"] = {
+            "base_parameters": dict(params),
+            "settings": {
+                "axis_samples": int(axis_samples),
+                "field_margin_periods": float(field_margin_periods),
+                "electron_energy_GeV": float(electron_energy_GeV),
+                "relax": bool(relax),
+                "precision": float(precision),
+                "max_iter": int(max_iter),
+                "method": 4,
+            },
+        }
 
         classification = classify_k(metrics["K_peak"])
         eph = metrics["electron_phase_error_rms_deg"]
@@ -376,7 +405,7 @@ if run:
                 st.download_button(
                     "Export V11-compatible 3D field map CSV",
                     fieldmap3d_csv_bytes(*grid3, field3),
-                    "radia_3d_field_map.csv", "text/csv"
+                    "radia_3d_field_map.csv", "text/csv", on_click="ignore"
                 )
 
         with tabs[3]:
@@ -448,7 +477,8 @@ if run:
                     csv_bytes(z, B),
                     "radia_on_axis_field.csv",
                     "text/csv",
-                    use_container_width=True,
+                    on_click="ignore",
+                    width="stretch",
                 )
             except Exception as exc:
                 e1.warning(f"CSV export unavailable: {exc}")
@@ -459,7 +489,8 @@ if run:
                     json_bytes(params, metrics),
                     "radia_summary.json",
                     "application/json",
-                    use_container_width=True,
+                    on_click="ignore",
+                    width="stretch",
                 )
             except Exception as exc:
                 e2.warning(f"JSON export unavailable: {exc}")
@@ -471,7 +502,8 @@ if run:
                     hdf5_bytes(z, B, params, metrics),
                     "radia_field.h5",
                     "application/x-hdf5",
-                    use_container_width=True,
+                    on_click="ignore",
+                    width="stretch",
                 )
             except Exception as exc:
                 e3.warning(f"HDF5 export unavailable: {exc}")
@@ -482,10 +514,48 @@ if run:
                     pdf_bytes(z, B, params, metrics),
                     "radia_report.pdf",
                     "application/pdf",
-                    use_container_width=True,
+                    on_click="ignore",
+                    width="stretch",
                 )
             except Exception as exc:
                 e4.warning(f"PDF export unavailable: {exc}")
+
+            try:
+                comparison = compare_metrics(ideal_metrics, metrics) if ideal_metrics is not None else None
+                run_metadata = {
+                    "python_version": platform.python_version(),
+                    "platform": platform.platform(),
+                    "radia_module": getattr(rad, "__file__", None),
+                    "radia_relaxation_result": rlx,
+                    "radia_relaxation_converged": rlx is not None,
+                    "calibration_history": calibration_history,
+                }
+                package = research_package_bytes(
+                    params, metrics, z, B,
+                    grid3=grid3, field3=field3,
+                    blocks=model.get("blocks"),
+                    comparison=comparison,
+                    run_metadata=run_metadata,
+                )
+                package_status = validate_research_package_bytes(package)
+                st.caption(
+                    f"Transfer package verified: schema {package_status['schema_version']}; "
+                    f"{package_status['payload_files_checked']} payload files checked."
+                )
+                st.download_button(
+                    "Download downstream research package (.zip)",
+                    package,
+                    "radia_magnet_studio_transfer_v1.zip",
+                    "application/zip",
+                    on_click="ignore",
+                    width="stretch",
+                    help=(
+                        "Versioned package containing device settings, units, coordinate definitions, "
+                        "geometry, checksums, on-axis field data and the optional 3D field map."
+                    ),
+                )
+            except Exception as exc:
+                st.warning(f"Research-package export unavailable: {exc}")
 
             if device == "APPLE-II":
                 st.warning(
@@ -495,3 +565,7 @@ if run:
 
     except Exception as exc:
         st.exception(exc)
+
+from app.advanced_analysis import render_advanced_analysis
+
+render_advanced_analysis()

@@ -35,20 +35,40 @@ def cumulative_trapz(y, x):
         out[1:] = np.cumsum(0.5 * (y[1:] + y[:-1]) * np.diff(x))
     return out
 
-def harmonic_ratios(z_mm, signal, period_mm):
+def harmonic_ratios(z_mm, signal, period_mm, exclude_end_periods=1.0):
+    """Estimate H1/H3/H5 with a leakage-resistant joint sinusoidal fit."""
     z = np.asarray(z_mm, float)
     s = np.asarray(signal, float)
-    if len(z) < 8:
+    period = float(period_mm)
+    if len(z) < 8 or period <= 0:
         return {"H1": 0.0, "H3/H1": 0.0, "H5/H1": 0.0}
-    s = s - np.mean(s)
-    dz = float(np.mean(np.diff(z)))
-    freq = np.fft.rfftfreq(len(s), d=dz)
-    amp = np.abs(np.fft.rfft(s))
-    f1 = 1.0 / float(period_mm)
-    def at_harmonic(n):
-        idx = int(np.argmin(np.abs(freq - n * f1)))
-        return float(amp[idx])
-    h1, h3, h5 = at_harmonic(1), at_harmonic(3), at_harmonic(5)
+    if z.ndim != 1 or s.ndim != 1 or len(z) != len(s):
+        raise ValueError("harmonic_ratios expects equal-length 1D arrays.")
+    if not np.all(np.diff(z) > 0) or not np.all(np.isfinite(z)) or not np.all(np.isfinite(s)):
+        raise ValueError("Harmonic-analysis inputs must be finite with increasing z.")
+
+    margin = max(0.0, float(exclude_end_periods)) * period
+    lo, hi = z[0] + margin, z[-1] - margin
+    usable_periods = int(np.floor((hi - lo) / period))
+    if usable_periods < 1:
+        lo, hi = z[0], z[-1]
+        usable_periods = max(1, int(np.floor((hi - lo) / period)))
+    center = 0.5 * (lo + hi)
+    half_width = 0.5 * usable_periods * period
+    mask = (z >= center - half_width) & (z <= center + half_width)
+    zz, ss = z[mask], s[mask]
+    if len(zz) < 8:
+        zz, ss = z, s
+        center = float(np.mean(z))
+
+    u = (zz - center) / period
+    columns = [np.ones_like(u), u]
+    for n in (1, 3, 5):
+        columns.extend((np.cos(2.0 * np.pi * n * u), np.sin(2.0 * np.pi * n * u)))
+    coeff, _, _, _ = np.linalg.lstsq(np.column_stack(columns), ss, rcond=None)
+    h1 = float(np.hypot(coeff[2], coeff[3]))
+    h3 = float(np.hypot(coeff[4], coeff[5]))
+    h5 = float(np.hypot(coeff[6], coeff[7]))
     return {
         "H1": h1,
         "H3/H1": h3 / h1 if h1 else 0.0,
@@ -198,13 +218,25 @@ def compare_metrics(ideal, perturbed):
         b = perturbed.get(k)
         try:
             out[k] = {"ideal": float(a), "error": float(b), "delta": float(b) - float(a)}
-        except Exception:
+        except (TypeError, ValueError):
             out[k] = {"ideal": a, "error": b, "delta": None}
     return out
 
 def analyze(z_mm, B, period_mm, electron_energy_GeV=3.0):
     z = np.asarray(z_mm, float)
     B = np.asarray(B, float)
+    if z.ndim != 1 or z.size < 2:
+        raise ValueError("z_mm must be a 1D array with at least two samples.")
+    if B.shape != (z.size, 3):
+        raise ValueError(f"B must have shape ({z.size}, 3); got {B.shape}.")
+    if not np.all(np.isfinite(z)) or not np.all(np.isfinite(B)):
+        raise ValueError("Analysis inputs must be finite.")
+    if not np.all(np.diff(z) > 0):
+        raise ValueError("z_mm must be strictly increasing.")
+    if float(period_mm) <= 0:
+        raise ValueError("period_mm must be positive.")
+    if float(electron_energy_GeV) <= ELECTRON_REST_GEV:
+        raise ValueError("electron_energy_GeV must exceed the electron rest energy.")
     bperp = np.sqrt(B[:, 0] ** 2 + B[:, 1] ** 2)
 
     bx_peak = float(np.max(np.abs(B[:, 0]))) if len(B) else 0.0
