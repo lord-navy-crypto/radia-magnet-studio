@@ -34,7 +34,7 @@ st.caption(
 )
 
 with st.sidebar:
-    st.header("Presets")
+    st.header("1 · Setup — Presets")
     builtin_name = st.selectbox("Built-in preset", list(BUILTIN_PRESETS), key="preset_builtin_name")
     if st.button("Load built-in preset", width="stretch"):
         runtime = parse_preset(BUILTIN_PRESETS[builtin_name])
@@ -413,9 +413,11 @@ if run:
         else:
             st.info(f"Computed magnetic regime: {classification}.")
 
+st.caption("Workspace order: Setup → Run → Results → Analysis → Verification / Export.")
+
         tabs = st.tabs([
-            "On-axis field", "2D map", "3D field map", "3D magnet geometry",
-            "Trajectory", "Electron phase", "Ideal comparison", "Metrics & export"
+            "2 · Results — On-axis field", "3 · Results — 2D field map", "4 · Results — 3D field map", "5 · Model — Magnet geometry",
+            "6 · Analysis — Trajectory", "7 · Analysis — Electron phase", "8 · Verification — Ideal comparison", "9 · Export — Metrics & files"
         ])
 
         with tabs[0]:
