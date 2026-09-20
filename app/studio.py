@@ -413,7 +413,7 @@ if run:
         else:
             st.info(f"Computed magnetic regime: {classification}.")
 
-st.caption("Workspace order: Setup → Run → Results → Analysis → Verification / Export.")
+        st.caption("Workspace order: Setup → Run → Results → Analysis → Verification / Export.")
 
         tabs = st.tabs([
             "2 · Results — On-axis field", "3 · Results — 2D field map", "4 · Results — 3D field map", "5 · Model — Magnet geometry",
